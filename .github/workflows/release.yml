@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的版本号(如 v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 打包并发布
+    runs-on: macos-15
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 确定版本号
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "版本号必须以 v 开头,当前: $TAG"; exit 1 ;;
+          esac
+          SRC_VERSION="$(sed -n 's/^.*static let current = "\([^"]*\)".*/\1/p' Sources/GitCore/AppVersion.swift)"
+          if [ -z "$SRC_VERSION" ]; then
+            echo "无法从 Sources/GitCore/AppVersion.swift 提取版本号"; exit 1
+          fi
+          if [ "v$SRC_VERSION" != "$TAG" ]; then
+            echo "tag($TAG) 与源码版本(v$SRC_VERSION)不一致,请先更新 AppVersion.swift"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: 构建并打包 (Apple Silicon)
+        run: bash make-app.sh release
+
+      - name: 签名并生成 DMG / ZIP
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          codesign --force --deep --sign - build/SourceGit.app
+          bash scripts/make-dmg.sh "$TAG"
+          ditto -c -k --keepParent build/SourceGit.app "build/SourceGit-${TAG}-arm64-macos.zip"
+          lipo -info build/SourceGit.app/Contents/MacOS/SourceGit
+          ls -lh build/
+
+      - name: 生成发布说明
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: bash scripts/release-notes.sh "$TAG"
+
+      - name: 创建 Release 并上传产物
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          # 先删后建,保证重复发版时内容与说明一致
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "SourceGit $TAG" \
+            --notes-file build/release-notes.md \
+            "build/SourceGit-${TAG}-arm64.dmg" "build/SourceGit-${TAG}-arm64-macos.zip"
