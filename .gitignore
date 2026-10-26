@@ -1,0 +1,19 @@
+# 远端仓库包含:.github/、Sources/(不含 Tests/)、scripts/、make-app.sh、README.md
+# 本地开发文档与测试用例(docs/、Tests/、PLAN.md)不入远端
+/*
+!.github/
+!Sources/
+!scripts/
+!make-app.sh
+!README.md
+!.gitignore
+
+# 以下为显式兜底(便于阅读实际不入库的内容)
+.build/
+build/
+.DS_Store
+*.dmg
+*.app/
+Tests/
+docs/
+PLAN.md

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: 构建与测试 (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          swift --version
+          git --version
+
+      - name: 构建
+        run: bash scripts/dev.sh build
+
+      - name: 测试
+        run: |
+          if [ -d Tests ]; then
+            bash scripts/dev.sh test
+          else
+            echo "测试用例未纳入本仓库,跳过"
+          fi
+
+      - name: 打包冒烟
+        run: |
+          bash make-app.sh release
+          test -d build/SourceGit.app
+          test -f build/SourceGit.app/Contents/Info.plist
+          echo "打包产物结构校验通过"
