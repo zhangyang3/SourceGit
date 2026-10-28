@@ -32,12 +32,7 @@ jobs:
         run: bash scripts/dev.sh build
 
       - name: 测试
-        run: |
-          if [ -d Tests ]; then
-            bash scripts/dev.sh test
-          else
-            echo "测试用例未纳入本仓库,跳过"
-          fi
+        run: bash scripts/dev.sh test
 
       - name: 打包冒烟
         run: |
